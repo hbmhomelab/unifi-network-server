@@ -2,7 +2,7 @@ volumes:
 
   app_data:
   mongo_data:
-  tailscale_state:
+  ts_state:
 
 services:
 
