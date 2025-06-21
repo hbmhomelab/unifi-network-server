@@ -1,0 +1,99 @@
+volumes:
+
+  app_data:
+  mongo_data:
+  tailscale_state:
+
+services:
+
+  app:
+    image: lscr.io/linuxserver/unifi-network-application:latest
+    restart: on-failure
+    network_mode: service:tailscale
+    environment:
+      - PUID=$UID
+      - PGID=$GID
+      - TZ=$TZ
+      - MONGO_HOST=localhost
+      - MONGO_PORT=27017
+      - MONGO_DBNAME=unifi
+      - MONGO_USER=unifi
+      - MONGO_PASS=$MONGO_USER_PASSWORD
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - app_data:/config
+      - ./backup:/config/data/backup
+    labels:
+      - deunhealth.restart.on.unhealthy=true
+    healthcheck:
+      test: curl --fail --insecure https://localhost:8443 || exit 1
+      start_period: 60s
+      timeout: 10s
+      interval: 20s
+      retries: 5
+    depends_on:
+      mongo:
+        condition: service_healthy
+        restart: true
+      tailscale:
+        condition: service_healthy
+        restart: true
+
+  mongo:
+    image: mongo:4.4
+    restart: on-failure
+    network_mode: service:tailscale
+    environment:
+      - PUID=$UID
+      - PGID=$GID
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD
+      - MONGO_USER=unifi
+      - MONGO_PASS=$MONGO_USER_PASSWORD
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - mongo_data:/data/db
+      - ./init-mongo.sh:/docker-entrypoint-initdb.d/init-mongo.sh:ro
+    labels:
+      - deunhealth.restart.on.unhealthy=true
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongo mongodb://unifi:${MONGO_USER_PASSWORD}@localhost:27017/?authSource=unifi --quiet
+      start_period: 20s
+      timeout: 10s
+      interval: 20s
+      retries: 5
+    depends_on:
+      tailscale:
+        condition: service_healthy
+        restart: true
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: ${TAILSCALE_HOSTNAME}
+    restart: on-failure
+    ports:
+      - 1900:1900/udp      # make controller discoverable on L2 network option
+      - 3478:3478/udp      # STUN
+      - 5514:5514/udp      # remote syslog
+      - 6789:6789          # mobile throughput test
+      - 8080:8080          # device communication
+      - 8843:8843          # guest portal HTTPS redirect port
+      - 8880:8880          # guest portal HTTP redirect port
+      - 10001:10001/udp    # AP discovery
+    environment:
+      - TS_EXTRA_ARGS=--advertise-tags=tag:container
+      - TS_TAILSCALED_EXTRA_ARGS=--no-logs-no-support
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/ts-serve.json
+      - TS_ENABLE_HEALTH_CHECK=true
+    volumes:
+      - ts_state:/var/lib/tailscale
+      - ./ts-serve.json:/config/ts-serve.json
+    labels:
+      - deunhealth.restart.on.unhealthy=true
+    healthcheck:
+      test: wget -q --tries=1 --spider http://127.0.0.1:9002/healthz || exit 1
+      interval: 20s
+      retries: 2
+      start_period: 20s
+      timeout: 10s
