@@ -75,10 +75,10 @@ services:
       - 1900:1900/udp      # make controller discoverable on L2 network option
       - 3478:3478/udp      # STUN
       - 5514:5514/udp      # remote syslog
-      - 6789:6789          # mobile throughput test
-      - 8080:8080          # device communication
-      - 8843:8843          # guest portal HTTPS redirect port
-      - 8880:8880          # guest portal HTTP redirect port
+      - 6789:6789/tcp      # mobile throughput test
+      - 8080:8080/tcp      # device communication
+      - 8843:8843/tcp      # guest portal HTTPS redirect port
+      - 8880:8880/tcp      # guest portal HTTP redirect port
       - 10001:10001/udp    # AP discovery
     environment:
       - TS_EXTRA_ARGS=--advertise-tags=tag:container
